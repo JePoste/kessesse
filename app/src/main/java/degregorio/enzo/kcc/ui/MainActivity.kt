@@ -7,12 +7,13 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.os.Environment.getExternalStoragePublicDirectory
 import android.provider.MediaStore
-import android.support.design.widget.Snackbar
 import android.support.v4.app.ActivityCompat
 import android.support.v4.content.ContextCompat
 import android.support.v4.content.FileProvider
@@ -21,7 +22,6 @@ import android.util.Base64.DEFAULT
 import android.util.Base64.encodeToString
 import android.view.View
 import degregorio.enzo.kcc.R
-import degregorio.enzo.kcc.data.Vision
 import kotlinx.android.synthetic.main.activity_main.*
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -130,7 +130,7 @@ class MainActivity : AppCompatActivity() {
             val imageBitmap = BitmapFactory.decodeFile(currentPhotoPath, BitmapFactory.Options())
 
             val baos = ByteArrayOutputStream()
-            imageBitmap.compress(Bitmap.CompressFormat.JPEG, 75, baos)
+            imageBitmap?.compress(Bitmap.CompressFormat.JPEG, 75, baos) ?: return
             val imageBytes = baos.toByteArray()
             val imageString = encodeToString(imageBytes, DEFAULT)
 
@@ -168,6 +168,7 @@ class MainActivity : AppCompatActivity() {
         // Get the dimensions of the View
         val targetW: Int = imageView.width
         val targetH: Int = imageView.height
+        if (targetH < 1 || targetW < 1) return
 
         val bmOptions = BitmapFactory.Options().apply {
             // Get the dimensions of the bitmap
@@ -184,9 +185,27 @@ class MainActivity : AppCompatActivity() {
             inSampleSize = scaleFactor
         }
         BitmapFactory.decodeFile(currentPhotoPath, bmOptions)?.also { bitmap ->
-            imageView.setImageBitmap(bitmap)
+            imageView.setImageBitmap(rotateImageIfRequired(bitmap))
         }
     }
 
+    private fun rotateImageIfRequired(img: Bitmap): Bitmap  {
+        val ei = ExifInterface(currentPhotoPath)
+        val orientation: Int = ei.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
 
+        return when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> rotateImage(img, 90)
+            ExifInterface.ORIENTATION_ROTATE_180 -> rotateImage(img, 180)
+            ExifInterface.ORIENTATION_ROTATE_270 -> rotateImage(img, 270)
+            else -> return img
+        }
+    }
+
+    private fun rotateImage(img: Bitmap, degree: Int): Bitmap {
+        val matrix = Matrix()
+        matrix.postRotate(degree.toFloat())
+        val rotatedImg = Bitmap.createBitmap(img, 0, 0, img.width, img.height, matrix, true)
+        img.recycle()
+        return rotatedImg
+    }
 }
